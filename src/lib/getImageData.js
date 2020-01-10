@@ -32,11 +32,12 @@ export default function getImageData(imageIds, displaySetInstanceUid) {
   const yVoxels = metaData0.rows;
   const zVoxels = metaDataMap.size;
   const signed = imageMetaData0.pixelRepresentation === 1;
-  const multiComponent = metaData0.numberOfComponents > 1;
+  const { samplesPerPixel, photometricInterpretation } = imageMetaData0;
 
-  // TODO: Support numberOfComponents = 3 for RGB?
-  if (multiComponent) {
-    throw new Error('Multi component image not supported by this plugin.');
+  if (samplesPerPixel > 1 && photometricInterpretation !== 'RGB') {
+    throw new Error(
+      `Multi component image ${photometricInterpretation} not supported by this plugin.`
+    );
   }
 
   let pixelArray;
@@ -47,20 +48,20 @@ export default function getImageData(imageIds, displaySetInstanceUid) {
           '8 Bit signed images are not yet supported by this plugin.'
         );
       } else {
-        throw new Error(
-          '8 Bit unsigned images are not yet supported by this plugin.'
+        pixelArray = new Uint8Array(
+          xVoxels * yVoxels * zVoxels * samplesPerPixel
         );
+        break;
       }
 
     case 16:
       pixelArray = new Float32Array(xVoxels * yVoxels * zVoxels);
-
       break;
   }
 
   const scalarArray = vtkDataArray.newInstance({
     name: 'Pixels',
-    numberOfComponents: 1,
+    numberOfComponents: samplesPerPixel,
     values: pixelArray,
   });
 

@@ -6,6 +6,9 @@
  * @param {*} modality The modality of the image.
  * @param {*} modalitySpecificScalingParameters Specific scaling paramaters for this modality. E.g. Patient weight.
  */
+
+import MinMaxRange from './minMaxRange';
+
 export default function insertSlice(
   imageData,
   sliceIndex,
@@ -23,27 +26,33 @@ export default function insertSlice(
   );
 
   const pixels = image.getPixelData();
-  const sliceLength = pixels.length;
+  const { rows, columns } = image;
+  const sliceLength = rows * columns;
 
   let pixelIndex = 0;
-  let max = scalingFunction(pixels[pixelIndex]);
-  let min = max;
 
-  for (let pixelIndex = 0; pixelIndex < pixels.length; pixelIndex++) {
-    const destIdx = pixelIndex + sliceIndex * sliceLength;
-    const pixel = pixels[pixelIndex];
-    const pixelValue = scalingFunction(pixel);
+  const componentsN = scalars.getNumberOfComponents();
+  const pixelValues = new Int16Array(componentsN);
+  const range = new MinMaxRange(componentsN);
 
-    if (pixelValue > max) {
-      max = pixelValue;
-    } else if (pixelValue < min) {
-      min = pixelValue;
+  for (let row = 0, flipRow = rows - 1; row < rows; row++, flipRow--) {
+    for (let col = 0; col < columns; col++) {
+      const destIdx = row * columns + col + sliceIndex * sliceLength;
+
+      const originalPixels = pixels.slice(pixelIndex, pixelIndex + componentsN);
+      originalPixels.forEach(
+        (p, idx) => (pixelValues[idx] = scalingFunction(p))
+      );
+
+      pixelValues.forEach((v, idx) => {
+        range.updateRangeI(idx, v);
+      });
+      scalars.setTuple(destIdx, pixelValues);
+      pixelIndex += componentsN === 3 ? componentsN + 1 : componentsN;
     }
-
-    scalarData[destIdx] = pixelValue;
   }
 
-  return { min, max };
+  return range;
 }
 
 function _getScalingFunction(

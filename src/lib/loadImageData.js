@@ -1,6 +1,7 @@
 import cornerstone from 'cornerstone-core';
 import insertSlice from './data/insertSlice.js';
 import getPatientWeightAndCorrectedDose from './data/getPatientWeightAndCorrectedDose.js';
+import MinMaxRange from './data/minMaxRange';
 
 // TODO: If we attempt to load multiple imageDataObjects at once this will break.
 export default function loadImageDataProgressively(imageDataObject) {
@@ -15,6 +16,7 @@ export default function loadImageDataProgressively(imageDataObject) {
     vtkImageData,
     metaDataMap,
     sortedDatasets,
+    imageMetaData0,
   } = imageDataObject;
   const loadImagePromises = imageIds.map(cornerstone.loadAndCacheImage);
   const imageId0 = imageIds[0];
@@ -43,10 +45,7 @@ export default function loadImageDataProgressively(imageDataObject) {
 
   scalarData[0] = 1;
 
-  const range = {
-    max: Number.NEGATIVE_INFINITY,
-    min: Number.POSITIVE_INFINITY,
-  };
+  const range = new MinMaxRange(imageMetaData0.samplesPerPixel);
 
   const numberOfFrames = imageIds.length;
   let numberProcessed = 0;
@@ -62,7 +61,7 @@ export default function loadImageDataProgressively(imageDataObject) {
         dataset => dataset.imagePositionPatient === imagePositionPatient
       );
 
-      const { max, min } = insertSlice(
+      const sliceRange = insertSlice(
         vtkImageData,
         sliceIndex,
         image,
@@ -70,17 +69,14 @@ export default function loadImageDataProgressively(imageDataObject) {
         modalitySpecificScalingParameters
       );
 
-      if (max > range.max) {
-        range.max = max;
-      }
-
-      if (min < range.min) {
-        range.min = min;
-      }
+      range.updateMinMaxRange(sliceRange);
 
       const dataArray = vtkImageData.getPointData().getScalars();
 
-      dataArray.setRange(range, 1);
+      for (let i = 0; i < imageMetaData0.samplesPerPixel; i += 1) {
+        dataArray.setRange(range.getRangeI(i), i);
+      }
+
       numberProcessed++;
 
       if (numberProcessed > reRenderTarget) {
